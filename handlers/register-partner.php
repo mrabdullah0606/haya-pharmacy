@@ -1,0 +1,78 @@
+<?php
+// handlers/register-partner.php
+// Handles partner card registration form submission via AJAX POST
+
+require_once __DIR__ . '/../config/config.php';
+require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/functions.php';
+
+header('Content-Type: application/json; charset=utf-8');
+
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    jsonResponse(false, 'Method not allowed.');
+}
+
+// ── Collect and validate inputs ───────────────────────────────
+$name     = clean($_POST['name']      ?? '');
+$mobile   = clean($_POST['mobile']    ?? '');
+$dob      = clean($_POST['dob']       ?? '');
+$gender   = clean($_POST['gender']    ?? '');
+$secretId = clean($_POST['secret_id'] ?? '');
+
+// Map Arabic gender to standard values for stats
+if ($gender === 'ذكر') {
+    $gender = 'male';
+} elseif ($gender === 'أنثى' || $gender === 'انثى') {
+    $gender = 'female';
+}
+
+$errors = [];
+
+if (mb_strlen($name) < 3) {
+    $errors[] = 'الاسم يجب أن يكون 3 أحرف على الأقل';
+}
+if (!preg_match('/^[0-9+ ]{7,20}$/', $mobile)) {
+    $errors[] = 'رقم الهاتف غير صحيح';
+}
+
+// Make DOB and gender optional if not provided
+if (!empty($dob) && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dob)) {
+    $errors[] = 'تاريخ الميلاد غير صحيح';
+}
+if (!empty($gender) && !in_array($gender, ['male', 'female'])) {
+    $errors[] = 'الجنس غير صحيح';
+}
+if (empty($secretId)) {
+    $errors[] = 'يرجى إدخال الرقم السري';
+}
+
+if (!empty($errors)) {
+    jsonResponse(false, implode(' | ', $errors));
+}
+
+// ── Check for duplicate phone number ─────────────────────────
+$db   = getDB();
+$stmt = $db->prepare('SELECT id FROM partners_cards WHERE mobile_number = ?');
+$stmt->execute([$mobile]);
+if ($stmt->fetch()) {
+    jsonResponse(false, 'رقم الهاتف هذا مسجل بالفعل في برنامج الشركاء');
+}
+
+// ── Generate card number & insert ────────────────────────────
+try {
+    $cardNumber = generateCardNumber(PARTNER_PREFIX, 'partners_cards');
+
+    $insert = $db->prepare(
+        'INSERT INTO partners_cards (card_number, full_name, mobile_number, gender, date_of_birth, passcode, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, NOW())'
+    );
+    $insert->execute([$cardNumber, $name, $mobile, $gender, $dob, $secretId]);
+
+    jsonResponse(true, 'تم التسجيل بنجاح', [
+        'card_number' => $cardNumber,
+        'name'        => $name,
+    ]);
+} catch (PDOException $e) {
+    jsonResponse(false, 'حدث خطأ أثناء التسجيل: ' . $e->getMessage());
+}
