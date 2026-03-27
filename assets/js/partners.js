@@ -226,9 +226,26 @@
         updateTimer();
     }
 
-    document.addEventListener('DOMContentLoaded', function () {
+    function initScrollNavbar() {
+        var topBar = document.querySelector('.haya-top-bar');
+        var logoImg = document.querySelector('.haya-main-logo img');
+        
+        if (!topBar || !logoImg) return;
+
+        window.addEventListener('scroll', function () {
+            if (window.scrollY > 50) {
+                topBar.classList.add('scrolled');
+                logoImg.src = SITE_URL + '/assets/images/haya-logo-wide-white.png';
+            } else {
+                topBar.classList.remove('scrolled');
+                logoImg.src = SITE_URL + '/assets/images/haya-logo.png';
+            }
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
         initModal();
-        setupCountdown();
+        initScrollNavbar();
     });
 
 }());
